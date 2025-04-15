@@ -2,48 +2,17 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const session = require('express-session');
-const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware to parse JSON bodies from requests
 app.use(express.json());
 
-// Session middleware
-app.use(session({
-    secret: 'your-secret-key', // Change this to a secure secret
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-        secure: true, // Set to true in production
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-}));
-
 // Serve static files (your frontend) from the "public" folder
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Database file path
 const DB_FILE = path.join(__dirname, 'database.json');
-const USERS_FILE = path.join(__dirname, 'users.json');
-
-// Initialize users database if it doesn't exist
-function initUsers() {
-    if (!fs.existsSync(USERS_FILE)) {
-        const initialUsers = {
-            users: [
-                {
-                    username: 'admin',
-                    // Default password: admin123
-                    password: '$2a$10$X7J3z5YQ5YQ5YQ5YQ5YQ5.YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5'
-                }
-            ]
-        };
-        fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2));
-        console.log('Users database initialized with default admin user.');
-    }
-}
 
 // Initialize database if it doesn't exist
 function initDatabase() {
@@ -119,67 +88,11 @@ function writeDatabase(data) {
     }
 }
 
-// Read users
-function readUsers() {
-    try {
-        const data = fs.readFileSync(USERS_FILE, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        console.error('Error reading users:', err);
-        return { users: [] };
-    }
-}
-
-// Write users
-function writeUsers(data) {
-    try {
-        fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
-        return true;
-    } catch (err) {
-        console.error('Error writing users:', err);
-        return false;
-    }
-}
-
-// Authentication middleware
-function isAuthenticated(req, res, next) {
-    if (req.session && req.session.user) {
-        return next();
-    }
-    res.status(401).json({ error: 'Unauthorized' });
-}
-
-// Initialize databases
+// Initialize database
 initDatabase();
-initUsers();
 
-// Login endpoint
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    const users = readUsers();
-    const user = users.users.find(u => u.username === username);
-
-    if (user && bcrypt.compareSync(password, user.password)) {
-        req.session.user = { username };
-        res.json({ success: true });
-    } else {
-        res.status(401).json({ error: 'Invalid credentials' });
-    }
-});
-
-// Logout endpoint
-app.post('/api/logout', (req, res) => {
-    req.session.destroy();
-    res.json({ success: true });
-});
-
-// Check authentication status
-app.get('/api/auth/status', (req, res) => {
-    res.json({ authenticated: !!req.session.user });
-});
-
-// Protected API endpoints
-app.get('/api/products', isAuthenticated, (req, res) => {
+// API endpoints
+app.get('/api/products', (req, res) => {
     try {
         const data = readDatabase();
         res.json({ products: data.products });
@@ -188,7 +101,7 @@ app.get('/api/products', isAuthenticated, (req, res) => {
     }
 });
 
-app.put('/api/products/:id', isAuthenticated, (req, res) => {
+app.put('/api/products/:id', (req, res) => {
     const productId = parseInt(req.params.id);
     const { quantity } = req.body;
     
