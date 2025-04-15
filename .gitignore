@@ -23,4 +23,11 @@ yarn-error.log
 
 # Build files
 dist/
-build/ 
+build/
+
+# Added from the code block
+npm install dotenv 
+
+ADMIN_USERNAME=youradmin
+ADMIN_PASSWORD_HASH=$2a$10$X7J3z5YQ5YQ5YQ5YQ5YQ5.YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5
+SESSION_SECRET=your-very-secure-session-secret

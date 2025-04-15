@@ -1,88 +1,221 @@
 // server.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware to parse JSON bodies from requests
 app.use(express.json());
 
+// Session middleware
+app.use(session({
+    secret: 'your-secret-key', // Change this to a secure secret
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        secure: true, // Set to true in production
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
+
 // Serve static files (your frontend) from the "public" folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Connect to the SQLite database (creates inventory.db if it doesn't exist)
-const db = new sqlite3.Database('./inventory.db', (err) => {
-    if (err) {
-        console.error(err.message);
+// Database file path
+const DB_FILE = path.join(__dirname, 'database.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
+
+// Initialize users database if it doesn't exist
+function initUsers() {
+    if (!fs.existsSync(USERS_FILE)) {
+        const initialUsers = {
+            users: [
+                {
+                    username: 'admin',
+                    // Default password: admin123
+                    password: '$2a$10$X7J3z5YQ5YQ5YQ5YQ5YQ5.YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5YQ5'
+                }
+            ]
+        };
+        fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2));
+        console.log('Users database initialized with default admin user.');
+    }
+}
+
+// Initialize database if it doesn't exist
+function initDatabase() {
+    if (!fs.existsSync(DB_FILE)) {
+        const initialData = {
+            products: [
+                {
+                    id: 1,
+                    name: "HCG",
+                    strength: "5,000 IU per vial",
+                    price: 49.99,
+                    quantity: 0,
+                    lowStockThreshold: 5
+                },
+                {
+                    id: 2,
+                    name: "Tesamorelin",
+                    strength: "10 mg per vial",
+                    price: 131.99,
+                    quantity: 0,
+                    lowStockThreshold: 3
+                },
+                {
+                    id: 3,
+                    name: "Retatrutide",
+                    strength: "10 mg per vial",
+                    price: 131.99,
+                    quantity: 0,
+                    lowStockThreshold: 3
+                },
+                {
+                    id: 4,
+                    name: "Semaglutide",
+                    strength: "5 mg per vial",
+                    price: 109.99,
+                    quantity: 0,
+                    lowStockThreshold: 4
+                },
+                {
+                    id: 5,
+                    name: "Semaglutide",
+                    strength: "10 mg per vial",
+                    price: 197.99,
+                    quantity: 0,
+                    lowStockThreshold: 4
+                }
+            ]
+        };
+        fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+        console.log('Database initialized with initial data.');
+    }
+}
+
+// Read database
+function readDatabase() {
+    try {
+        const data = fs.readFileSync(DB_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (err) {
+        console.error('Error reading database:', err);
+        return { products: [] };
+    }
+}
+
+// Write to database
+function writeDatabase(data) {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+        return true;
+    } catch (err) {
+        console.error('Error writing to database:', err);
+        return false;
+    }
+}
+
+// Read users
+function readUsers() {
+    try {
+        const data = fs.readFileSync(USERS_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (err) {
+        console.error('Error reading users:', err);
+        return { users: [] };
+    }
+}
+
+// Write users
+function writeUsers(data) {
+    try {
+        fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+        return true;
+    } catch (err) {
+        console.error('Error writing users:', err);
+        return false;
+    }
+}
+
+// Authentication middleware
+function isAuthenticated(req, res, next) {
+    if (req.session && req.session.user) {
+        return next();
+    }
+    res.status(401).json({ error: 'Unauthorized' });
+}
+
+// Initialize databases
+initDatabase();
+initUsers();
+
+// Login endpoint
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    const users = readUsers();
+    const user = users.users.find(u => u.username === username);
+
+    if (user && bcrypt.compareSync(password, user.password)) {
+        req.session.user = { username };
+        res.json({ success: true });
     } else {
-        console.log('Connected to the inventory database.');
+        res.status(401).json({ error: 'Invalid credentials' });
     }
 });
 
-// Create the products table if it does not already exist
-db.run(`CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    strength TEXT,
-    price REAL,
-    quantity INTEGER,
-    lowStockThreshold INTEGER
-)`);
+// Logout endpoint
+app.post('/api/logout', (req, res) => {
+    req.session.destroy();
+    res.json({ success: true });
+});
 
-// Seed the database with initial product data only if the table is empty
-db.get("SELECT COUNT(*) as count FROM products", (err, row) => {
-    if (err) {
-        console.error(err.message);
-    } else if (row.count === 0) {
-        const insert = db.prepare(`INSERT INTO products (id, name, strength, price, quantity, lowStockThreshold) VALUES (?, ?, ?, ?, ?, ?)`);
-        const products = [
-            [1, "HCG", "5,000 IU per vial", 49.99, 0, 5],
-            [2, "Tesamorelin", "10 mg per vial", 131.99, 0, 3],
-            [3, "Retatrutide", "10 mg per vial", 131.99, 0, 3],
-            [4, "Semaglutide", "5 mg per vial", 109.99, 0, 4],
-            [5, "Semaglutide", "10 mg per vial", 197.99, 0, 4]
-        ];
-        products.forEach(product => {
-            insert.run(product, (err) => {
-                if (err) console.error(err.message);
-            });
-        });
-        insert.finalize();
-        console.log('Initial data seeded into the database.');
+// Check authentication status
+app.get('/api/auth/status', (req, res) => {
+    res.json({ authenticated: !!req.session.user });
+});
+
+// Protected API endpoints
+app.get('/api/products', isAuthenticated, (req, res) => {
+    try {
+        const data = readDatabase();
+        res.json({ products: data.products });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// API endpoint to get all products
-app.get('/api/products', (req, res) => {
-    db.all("SELECT * FROM products", [], (err, rows) => {
-        if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-        }
-        res.json({ products: rows });
-    });
-});
-
-// API endpoint to update a product's quantity
-app.put('/api/products/:id', (req, res) => {
-    const productId = req.params.id;
+app.put('/api/products/:id', isAuthenticated, (req, res) => {
+    const productId = parseInt(req.params.id);
     const { quantity } = req.body;
+    
     if (quantity == null || quantity < 0) {
         res.status(400).json({ error: "Invalid quantity" });
         return;
     }
-    db.run(
-        "UPDATE products SET quantity = ? WHERE id = ?",
-        [quantity, productId],
-        function(err) {
-            if (err) {
-                res.status(500).json({ error: err.message });
-                return;
-            }
-            res.json({ updatedID: productId, changes: this.changes });
+    
+    try {
+        const data = readDatabase();
+        const productIndex = data.products.findIndex(p => p.id === productId);
+        
+        if (productIndex === -1) {
+            res.status(404).json({ error: "Product not found" });
+            return;
         }
-    );
+        
+        data.products[productIndex].quantity = quantity;
+        
+        if (writeDatabase(data)) {
+            res.json({ updatedID: productId, changes: 1 });
+        } else {
+            res.status(500).json({ error: "Failed to update database" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Start the server

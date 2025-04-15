@@ -3,322 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pharma Inventory Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3b82f6',
-                        secondary: '#10b981',
-                        danger: '#ef4444',
-                    }
-                }
-            }
-        }
-    </script>
+    <title>Peptide Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .product-card {
-            transition: all 0.3s ease;
+            margin-bottom: 20px;
         }
-        .product-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .quantity-btn {
-            transition: all 0.2s ease;
+        .nav-link {
+            cursor: pointer;
         }
-        .quantity-btn:active {
-            transform: scale(0.95);
+        .collapsing {
+            transition: none !important;
         }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        .low-stock {
-            animation: pulse 2s infinite;
+        .collapse:not(.show) {
+            display: none !important;
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <header class="mb-10 text-center">
-            <h1 class="text-4xl font-bold text-primary mb-2">Pharma Inventory Manager</h1>
-            <p class="text-gray-600">Track and manage your pharmaceutical products inventory</p>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-            <!-- Inventory Summary Cards -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500">Total Products</p>
-                        <h3 class="text-2xl font-bold" id="total-products">6</h3>
-                    </div>
-                    <div class="bg-blue-100 p-3 rounded-full">
-                        <i class="fas fa-boxes text-primary text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500">Total Inventory Value</p>
-                        <h3 class="text-2xl font-bold" id="total-value">$0.00</h3>
-                    </div>
-                    <div class="bg-green-100 p-3 rounded-full">
-                        <i class="fas fa-dollar-sign text-secondary text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500">Low Stock Items</p>
-                        <h3 class="text-2xl font-bold" id="low-stock-count">0</h3>
-                    </div>
-                    <div class="bg-red-100 p-3 rounded-full">
-                        <i class="fas fa-exclamation-triangle text-danger text-xl"></i>
-                    </div>
-                </div>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Peptide Inventory</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
             </div>
         </div>
+    </nav>
 
-        <div class="bg-white rounded-lg shadow overflow-hidden mb-8">
-            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-xl font-semibold text-gray-800">Product Inventory</h2>
-                <div class="relative">
-                    <select id="filter-select" class="block appearance-none bg-gray-100 border border-gray-200 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-primary">
-                        <option value="all">All Products</option>
-                        <option value="low">Low Stock</option>
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="inventory-list">
-                <!-- Product cards will be inserted here by JavaScript -->
-            </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">Inventory Analytics</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <h3 class="font-medium text-gray-700 mb-2">Stock Distribution</h3>
-                    <div class="h-64" id="stock-chart"></div>
-                </div>
-                <div>
-                    <h3 class="font-medium text-gray-700 mb-2">Value Distribution</h3>
-                    <div class="h-64" id="value-chart"></div>
-                </div>
-            </div>
+    <div class="container mt-4">
+        <div class="row" id="productsContainer">
+            <!-- Products will be loaded here -->
         </div>
     </div>
 
     <script>
-        let products = [];
+        // Check authentication status on page load
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                window.location.href = '/login.html';
+            }
+        }
 
-        // Load inventory from /api/products
-        async function loadInventory() {
+        // Handle logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        });
+
+        // Load products
+        async function loadProducts() {
             try {
                 const response = await fetch('/api/products');
-                const data = await response.json();
-                products = data.products;
-                renderProducts();
-            } catch (error) {
-                console.error('Error loading inventory:', error);
-            }
-        }
-
-        // Update product quantity via PUT /api/products/:id
-        async function updateProductQuantity(productId, newQuantity) {
-            try {
-                const response = await fetch(`/api/products/${productId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quantity: newQuantity })
-                });
-                if (!response.ok) {
-                    throw new Error('Failed to update product');
-                }
-                // Reload the inventory to ensure we have the latest data
-                await loadInventory();
-            } catch (error) {
-                console.error('Error updating product:', error);
-            }
-        }
-
-        // Adjust product quantity
-        async function adjustQuantity(productId, change) {
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                const newQuantity = Math.max(0, product.quantity + change);
-                await updateProductQuantity(productId, newQuantity);
-            }
-        }
-
-        // Set custom quantity via prompt
-        async function setCustomQuantity(productId) {
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                const newQuantity = prompt(`Enter new quantity for ${product.name} (${product.strength}):`, product.quantity);
-                if (newQuantity !== null && !isNaN(newQuantity)) {
-                    const quantity = parseInt(newQuantity);
-                    if (quantity >= 0) {
-                        await updateProductQuantity(productId, quantity);
-                    }
-                }
-            }
-        }
-
-        // Render product cards
-        function renderProducts(filter = 'all') {
-            const inventoryList = document.getElementById('inventory-list');
-            inventoryList.innerHTML = '';
-
-            let filteredProducts = [...products];
-            if (filter === 'low') {
-                filteredProducts = products.filter(product => product.quantity <= product.lowStockThreshold);
-            }
-
-            if (filteredProducts.length === 0) {
-                inventoryList.innerHTML = `
-                    <div class="p-8 text-center text-gray-500">
-                        <i class="fas fa-inbox text-4xl mb-2"></i>
-                        <p>No products match your filter criteria</p>
-                    </div>
-                `;
-                return;
-            }
-
-            filteredProducts.forEach(product => {
-                const isLowStock = product.quantity <= product.lowStockThreshold;
-                const stockStatusClass = isLowStock ? 'bg-red-100 text-danger' : 'bg-green-100 text-secondary';
-                const stockStatusText = isLowStock ? 'Low Stock' : 'In Stock';
-
-                const productCard = document.createElement('div');
-                productCard.className = `product-card p-6 border-b border-gray-200 last:border-b-0 ${isLowStock ? 'low-stock' : ''}`;
-                productCard.innerHTML = `
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-gray-800">${product.name}</h3>
-                            <p class="text-gray-600">${product.strength}</p>
-                        </div>
-                        <span class="text-xs font-medium px-2 py-1 rounded-full ${stockStatusClass}">${stockStatusText}</span>
-                    </div>
-                    
-                    <div class="flex justify-between items-center mb-2">
-                        <div>
-                            <span class="text-gray-500">Price:</span>
-                            <span class="font-medium ml-1">$${product.price.toFixed(2)}</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500">Value:</span>
-                            <span class="font-medium ml-1">$${(product.price * product.quantity).toFixed(2)}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between mt-4">
-                        <div class="flex items-center">
-                            <button class="quantity-btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-l" onclick="adjustQuantity(${product.id}, -1)">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                            <div class="bg-gray-100 px-4 py-2 text-center font-bold min-w-[60px]">
-                                ${product.quantity}
+                const products = await response.json();
+                
+                const container = document.getElementById('productsContainer');
+                container.innerHTML = '';
+                
+                products.forEach(product => {
+                    const card = document.createElement('div');
+                    card.className = 'col-md-4';
+                    card.innerHTML = `
+                        <div class="card product-card">
+                            <div class="card-body">
+                                <h5 class="card-title">${product.name}</h5>
+                                <p class="card-text">Quantity: ${product.quantity}</p>
+                                <div class="quantity-controls">
+                                    <button class="btn btn-sm btn-danger" onclick="updateQuantity('${product.id}', -1)">-</button>
+                                    <button class="btn btn-sm btn-success" onclick="updateQuantity('${product.id}', 1)">+</button>
+                                </div>
                             </div>
-                            <button class="quantity-btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-r" onclick="adjustQuantity(${product.id}, 1)">
-                                <i class="fas fa-plus"></i>
-                            </button>
                         </div>
-                        <button class="quantity-btn bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="setCustomQuantity(${product.id})">
-                            <i class="fas fa-edit mr-1"></i> Set
-                        </button>
-                    </div>
-                `;
-                inventoryList.appendChild(productCard);
-            });
-
-            updateSummary();
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading products:', error);
+            }
         }
 
-        // Update summary statistics
-        function updateSummary() {
-            const totalProducts = products.length;
-            const totalValue = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
-            const lowStockCount = products.filter(product => product.quantity <= product.lowStockThreshold).length;
-
-            document.getElementById('total-products').textContent = totalProducts;
-            document.getElementById('total-value').textContent = `$${totalValue.toFixed(2)}`;
-            document.getElementById('low-stock-count').textContent = lowStockCount;
-
-            updateCharts();
-        }
-
-        // Simple chart rendering (using CSS for simplicity)
-        function updateCharts() {
-            const stockChart = document.getElementById('stock-chart');
-            const valueChart = document.getElementById('value-chart');
-            
-            stockChart.innerHTML = '';
-            valueChart.innerHTML = '';
-            
-            products.forEach(product => {
-                const maxQuantity = Math.max(...products.map(p => p.quantity), 10);
-                const barHeight = (product.quantity / maxQuantity) * 100;
+        // Update product quantity
+        async function updateQuantity(productId, change) {
+            try {
+                const response = await fetch(`/api/products/${productId}/quantity`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ change })
+                });
                 
-                const bar = document.createElement('div');
-                bar.className = 'flex items-center mb-2';
-                bar.innerHTML = `
-                    <div class="w-24 text-sm text-gray-600 truncate">${product.name}</div>
-                    <div class="flex-1">
-                        <div class="bg-primary h-6 rounded" style="width: ${barHeight}%"></div>
-                    </div>
-                    <div class="w-10 text-right text-sm font-medium">${product.quantity}</div>
-                `;
-                stockChart.appendChild(bar);
-            });
-            
-            const values = products.map(product => product.price * product.quantity);
-            const maxValue = Math.max(...values, 1000);
-            
-            products.forEach((product, index) => {
-                const value = product.price * product.quantity;
-                const barHeight = (value / maxValue) * 100;
-                const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-purple-500'];
-                
-                const bar = document.createElement('div');
-                bar.className = 'flex items-center mb-2';
-                bar.innerHTML = `
-                    <div class="w-24 text-sm text-gray-600 truncate">${product.name}</div>
-                    <div class="flex-1">
-                        <div class="${colors[index % colors.length]} h-6 rounded" style="width: ${barHeight}%"></div>
-                    </div>
-                    <div class="w-20 text-right text-sm font-medium">$${value.toFixed(2)}</div>
-                `;
-                valueChart.appendChild(bar);
-            });
+                if (response.ok) {
+                    loadProducts();
+                }
+            } catch (error) {
+                console.error('Error updating quantity:', error);
+            }
         }
 
-        // Initialize the app
-        async function init() {
-            await loadInventory();
-            
-            // Add filter event listener
-            document.getElementById('filter-select').addEventListener('change', function() {
-                renderProducts(this.value);
-            });
-        }
-
-        // Start the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', init);
+        // Initialize
+        checkAuth();
+        loadProducts();
     </script>
 </body>
 </html>
